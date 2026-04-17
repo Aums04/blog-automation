@@ -91,12 +91,17 @@ pipeline {
         stage('Publish via Selenium') {
             steps {
                 echo '=== Stage 5: Publishing to Dev.to via Selenium ==='
-                echo 'Selenium will: Login (via Chrome profile) -> New Post -> Type Title + Content -> Publish'
-                script {
-                    if (isUnix()) {
-                        sh "${PYTHON_EXE} src/publish_blog.py"
-                    } else {
-                        bat "${PYTHON_EXE} src/publish_blog.py"
+                echo 'Selenium will: Login (via Profile or Credentials) -> New Post -> Type Title + Content -> Publish'
+                withCredentials([
+                    string(credentialsId: 'DEVTO_EMAIL_SECRET', variable: 'DEVTO_EMAIL'),
+                    string(credentialsId: 'DEVTO_PASSWORD_SECRET', variable: 'DEVTO_PASSWORD')
+                ]) {
+                    script {
+                        if (isUnix()) {
+                            sh "export DEVTO_EMAIL=${DEVTO_EMAIL} && export DEVTO_PASSWORD=${DEVTO_PASSWORD} && ${PYTHON_EXE} src/publish_blog.py"
+                        } else {
+                            bat "set DEVTO_EMAIL=${DEVTO_EMAIL} && set DEVTO_PASSWORD=${DEVTO_PASSWORD} && ${PYTHON_EXE} src/publish_blog.py"
+                        }
                     }
                 }
             }

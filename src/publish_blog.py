@@ -3,7 +3,7 @@ Selenium Blog Publisher - Dev.to
 Dev.to has a simple textarea editor with no bot detection.
 Steps: Launch Chrome -> Log in -> New post -> Type title + content -> Publish
 
-PREREQUISITE: Run login_once.py first to save your Dev.to session.
+PREREQUISITE: Ensure DEVTO_EMAIL and DEVTO_PASSWORD are set in your .env file or Jenkins credentials.
 """
 import os
 import sys
@@ -15,12 +15,18 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from dotenv import load_dotenv
+
+load_dotenv()
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-SELENIUM_PROFILE = "C:/Temp/selenium_devto_profile"
+SELENIUM_PROFILE = "C:/Temp/selenium_devto_temp"
 CHROME_PATH = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
 DEBUG_PORT = 9222
 DEVTO_NEW_POST = "https://dev.to/new"
+DEVTO_LOGIN_URL = "https://dev.to/enter"
+DEVTO_EMAIL = os.getenv("DEVTO_EMAIL")
+DEVTO_PASSWORD = os.getenv("DEVTO_PASSWORD")
 
 
 def launch_chrome_with_debug_port():
@@ -65,19 +71,61 @@ def load_blog_content():
     return title, content
 
 
-def login_check(driver):
-    """Navigate to Dev.to and verify we are logged in."""
-    print("[Selenium] Step 1: Checking login on Dev.to...")
-    driver.get("https://dev.to")
-    time.sleep(4)
-
-    # If user avatar / profile icon is in the page, we are logged in
-    if "Log in" in driver.page_source and "Create account" in driver.page_source:
-        print("[Selenium] Not logged in. Run login_once.py to log into Dev.to first.")
+def login_with_credentials(driver, email, password):
+    """Fallback method: log in using email and password."""
+    if not email or not password:
+        print("[Selenium] No credentials found in environment (DEVTO_EMAIL/DEVTO_PASSWORD).")
         return False
 
-    print("[Selenium] Logged into Dev.to successfully.")
-    return True
+    print(f"[Selenium] Attempting automated login for {email}...")
+    wait = WebDriverWait(driver, 15)
+    
+    try:
+        driver.get(DEVTO_LOGIN_URL)
+        time.sleep(3)
+
+        # Email field
+        email_field = wait.until(EC.presence_of_element_located((By.ID, "user_email")))
+        email_field.clear()
+        for char in email:
+            email_field.send_keys(char)
+            time.sleep(0.05)
+        
+        # Password field
+        password_field = driver.find_element(By.ID, "user_password")
+        password_field.clear()
+        for char in password:
+            password_field.send_keys(char)
+            time.sleep(0.05)
+        
+        # Submit button has class crayons-btn--l
+        submit_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='submit'], .crayons-btn--l")))
+        submit_btn.click()
+        
+        # Step 4: Verify success by waiting for the member menu or create post button
+        print("[Selenium] Waiting for login verification...")
+        try:
+            wait.until(EC.presence_of_element_located((By.ID, "member-menu-button")))
+            print("[Selenium] Logged in successfully using credentials (verified via member-menu).")
+            return True
+        except:
+            # Fallback check
+            if "Log in" not in driver.page_source:
+                print("[Selenium] Logged in successfully (verified via page source).")
+                return True
+            else:
+                print("[Selenium] Login failed. Redirected but 'Log in' still present.")
+                return False
+            
+    except Exception as e:
+        print(f"[Selenium] Error during automated login: {e}")
+        return False
+
+
+def login_check(driver):
+    """Navigate to Dev.to and perform automated login using credentials."""
+    print("[Selenium] Step 1: Performing automated login on Dev.to...")
+    return login_with_credentials(driver, DEVTO_EMAIL, DEVTO_PASSWORD)
 
 
 def write_and_publish(driver, title, content):
@@ -207,7 +255,7 @@ def main():
         driver = attach_selenium_to_chrome()
 
         if not login_check(driver):
-            print("\nRun 'python login_once.py' and choose Dev.to to log in first.")
+            print("\n[RESULT] Login failed. Check your credentials in .env or task logs.")
             return
 
         success = write_and_publish(driver, title, content)

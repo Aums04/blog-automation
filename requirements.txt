@@ -2,3 +2,5 @@ selenium
 flask
 google-generativeai
 python-dotenv
+pytest
+pytest-html
