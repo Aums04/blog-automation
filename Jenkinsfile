@@ -3,6 +3,9 @@ pipeline {
 
     environment {
         PYTHONUNBUFFERED = '1'
+        // Define VENV path for consistency
+        VENV_PATH = 'venv'
+        PYTHON_EXE = "${isUnix() ? 'venv/bin/python' : 'venv\\Scripts\\python.exe'}"
     }
 
     parameters {
@@ -18,34 +21,50 @@ pipeline {
     stages {
         stage('Setup') {
             steps {
-                echo '=== Stage 1: Installing Dependencies ==='
-                sh 'pip install -r requirements.txt'
+                echo '=== Stage 1: Setting up Virtual Environment ==='
+                script {
+                    if (isUnix()) {
+                        sh 'python3 -m venv ${VENV_PATH} || python -m venv ${VENV_PATH}'
+                        sh "${VENV_PATH}/bin/pip install -r requirements.txt"
+                    } else {
+                        bat "python -m venv ${VENV_PATH}"
+                        bat "${VENV_PATH}\\Scripts\\pip install -r requirements.txt"
+                    }
+                }
             }
         }
 
         stage('Run Tests') {
             steps {
                 echo '=== Stage 2: Running Test Suite ==='
-                sh 'python -m pytest test_blog.py -v --tb=short --junitxml=test-results.xml || python -m unittest test_blog -v 2>&1 | tee test-output.txt'
+                script {
+                    if (isUnix()) {
+                        sh "${PYTHON_EXE} tests/test_blog.py"
+                    } else {
+                        bat "${PYTHON_EXE} tests/test_blog.py"
+                    }
+                }
             }
         }
 
         stage('Generate Blog Content') {
             steps {
                 echo '=== Stage 3: Generating Blog Content via Gemini AI ==='
-                script {
-                    if (params.DIRECT_PUBLISH) {
-                        echo 'Mode: DIRECT PUBLISH (auto)'
-                        sh "python generate_blog.py --topic \"${params.BLOG_TOPIC}\" --direct-publish"
-                    } else {
-                        echo 'Mode: MANUAL APPROVAL'
-                        sh "python generate_blog.py --topic \"${params.BLOG_TOPIC}\""
+                withCredentials([string(credentialsId: 'GEMINI_API_KEY_SECRET', variable: 'GEMINI_API_KEY')]) {
+                    script {
+                        def publishFlag = params.DIRECT_PUBLISH ? "--direct-publish" : ""
+                        if (isUnix()) {
+                            sh "export GEMINI_API_KEY=${GEMINI_API_KEY} && ${PYTHON_EXE} src/generate_blog.py --topic \"${params.BLOG_TOPIC}\" ${publishFlag}"
+                        } else {
+                            bat "set GEMINI_API_KEY=${GEMINI_API_KEY} && ${PYTHON_EXE} src/generate_blog.py --topic \"${params.BLOG_TOPIC}\" ${publishFlag}"
+                        }
                     }
                 }
+                
                 // Show preview in Jenkins console log
                 script {
-                    def title = readFile('blog_title.txt').trim()
-                    def content = readFile('blog_content.txt').trim()
+                    def title = readFile('data/blog_title.txt').trim()
+                    def content = readFile('data/blog_content.txt').trim()
                     echo "=========== BLOG PREVIEW ==========="
                     echo "Title: ${title}"
                     echo "Content (first 500 chars):"
@@ -67,9 +86,15 @@ pipeline {
 
         stage('Publish via Selenium') {
             steps {
-                echo '=== Stage 5: Publishing to Medium via Selenium ==='
-                echo 'Selenium will: Login (via Chrome profile) -> Write Story -> Type Content -> Publish'
-                sh 'python publish_blog.py'
+                echo '=== Stage 5: Publishing to Dev.to via Selenium ==='
+                echo 'Selenium will: Login (via Chrome profile) -> New Post -> Type Title + Content -> Publish'
+                script {
+                    if (isUnix()) {
+                        sh "${PYTHON_EXE} src/publish_blog.py"
+                    } else {
+                        bat "${PYTHON_EXE} src/publish_blog.py"
+                    }
+                }
             }
         }
     }
@@ -86,7 +111,7 @@ pipeline {
         }
         success {
             echo 'RESULT: Pipeline completed SUCCESSFULLY.'
-            echo 'Blog post has been published to Medium.'
+            echo 'Blog post has been published to Dev.to.'
         }
         failure {
             echo 'RESULT: Pipeline FAILED. Check stage logs for details.'
