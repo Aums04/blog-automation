@@ -1,0 +1,30 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+ENV/
+env/
+
+# Environment variables
+.env
+
+# Data and Artifacts
+data/*.txt
+data/*.json
+!data/.gitkeep
+
+# Selenium Profile (Sensitive)
+C:/Temp/selenium_devto_profile
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Submissions/logs
+submissions/
+*.log
