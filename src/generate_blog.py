@@ -10,6 +10,23 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+def suggest_topic():
+    """Use Gemini to brainstorm a trending technical topic."""
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY not found. Set it in .env file.")
+
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-2.5-flash')
+    
+    prompt = "Suggest one trending technical blog topic relevant to software engineering, AI, or web development. Return ONLY the topic name, no extra text."
+    
+    print("[Discovery] Scouting for a trending topic...")
+    response = model.generate_content(prompt)
+    topic = response.text.strip()
+    print(f"[Discovery] AI suggested topic: '{topic}'")
+    return topic
+
 def generate_blog(topic):
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
@@ -51,11 +68,17 @@ def main():
     parser = argparse.ArgumentParser(description="Generate a blog post using Gemini AI.")
     parser.add_argument("--topic", type=str, default="The Future of AI in Software Testing",
                         help="Topic for the blog post")
+    parser.add_argument("--random-topic", action="store_true",
+                        help="Ask AI to suggest a trending topic automatically")
     parser.add_argument("--direct-publish", action="store_true",
                         help="Skip preview - save as ready for auto-publishing")
     args = parser.parse_args()
 
-    title, content = generate_blog(args.topic)
+    topic = args.topic
+    if args.random_topic:
+        topic = suggest_topic()
+
+    title, content = generate_blog(topic)
 
     # Save to text files in the data directory
     script_dir = os.path.dirname(os.path.abspath(__file__))

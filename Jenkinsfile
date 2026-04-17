@@ -9,12 +9,13 @@ pipeline {
     }
 
     parameters {
+        booleanParam(name: 'RANDOM_TOPIC', defaultValue: true, description: 'Let AI suggest a trending topic automatically.')
+        string(name: 'BLOG_TOPIC', defaultValue: 'The Future of AI in Software Testing', description: 'Manual topic (ignored if RANDOM_TOPIC is checked).')
         booleanParam(name: 'DIRECT_PUBLISH', defaultValue: false, description: 'Skip manual approval and publish immediately.')
-        string(name: 'BLOG_TOPIC', defaultValue: 'The Future of AI in Software Testing', description: 'Topic for Gemini to write about.')
     }
 
     triggers {
-        // Scheduled daily posting at 8 AM
+        // Scheduled daily posting at 8 AM - Defaults to RANDOM topics
         cron('H 8 * * *')
     }
 
@@ -39,9 +40,9 @@ pipeline {
                 echo '=== Stage 2: Running Test Suite ==='
                 script {
                     if (isUnix()) {
-                        sh "${PYTHON_EXE} tests/test_blog.py"
+                        sh "${PYTHON_EXE} -m pytest tests/test_blog.py"
                     } else {
-                        bat "${PYTHON_EXE} tests/test_blog.py"
+                        bat "${PYTHON_EXE} -m pytest tests/test_blog.py"
                     }
                 }
             }
@@ -53,10 +54,13 @@ pipeline {
                 withCredentials([string(credentialsId: 'GEMINI_API_KEY_SECRET', variable: 'GEMINI_API_KEY')]) {
                     script {
                         def publishFlag = params.DIRECT_PUBLISH ? "--direct-publish" : ""
+                        def randomFlag = params.RANDOM_TOPIC ? "--random-topic" : ""
+                        def topicArg = params.RANDOM_TOPIC ? "" : "--topic \"${params.BLOG_TOPIC}\""
+                        
                         if (isUnix()) {
-                            sh "export GEMINI_API_KEY=${GEMINI_API_KEY} && ${PYTHON_EXE} src/generate_blog.py --topic \"${params.BLOG_TOPIC}\" ${publishFlag}"
+                            sh "export GEMINI_API_KEY=${GEMINI_API_KEY} && ${PYTHON_EXE} src/generate_blog.py ${topicArg} ${randomFlag} ${publishFlag}"
                         } else {
-                            bat "set GEMINI_API_KEY=${GEMINI_API_KEY} && ${PYTHON_EXE} src/generate_blog.py --topic \"${params.BLOG_TOPIC}\" ${publishFlag}"
+                            bat "set GEMINI_API_KEY=${GEMINI_API_KEY} && ${PYTHON_EXE} src/generate_blog.py ${topicArg} ${randomFlag} ${publishFlag}"
                         }
                     }
                 }
@@ -104,8 +108,9 @@ pipeline {
             echo '========================================='
             echo '         PIPELINE EXECUTION REPORT       '
             echo '========================================='
-            echo "Topic: ${params.BLOG_TOPIC}"
-            echo "Mode: ${params.DIRECT_PUBLISH ? 'Direct Publish (Automated)' : 'Manual Approval'}"
+            echo "Mode: ${params.RANDOM_TOPIC ? 'Random AI Topic' : 'Manual Topic'}"
+            if (!params.RANDOM_TOPIC) { echo "Topic: ${params.BLOG_TOPIC}" }
+            echo "Direct Publish: ${params.DIRECT_PUBLISH}"
             echo "Timestamp: ${new Date()}"
             echo '========================================='
         }
